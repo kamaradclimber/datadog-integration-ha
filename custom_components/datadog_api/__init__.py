@@ -14,13 +14,12 @@ from datadog_api_client import ApiClient, Configuration
 from datadog_api_client.v1.api.events_api import EventsApi
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
-from homeassistant.const import Platform, EVENT_STATE_CHANGED
+from homeassistant.const import Platform, EVENT_STATE_CHANGED, __version__
 from homeassistant.core import HomeAssistant, Event, EventStateChangedData, State
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
 from datetime import datetime
 from homeassistant.helpers.storage import Store
-from homeassistant.const import __version__
 from homeassistant.helpers.state import state_as_number
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,7 +88,7 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
             if isinstance(state, (float, int))
             else state_as_number(new_state)
             )
-    tags = [f"entity:{new_state.entity_id}", "service:home-assistant"]
+    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", "version:{__version__}"]
     unit = None
     if "friendly_name" in new_state.attributes:
         tags.append(f"friendly_name:{new_state.attributes['friendly_name']}")
