@@ -88,7 +88,7 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
             if isinstance(state, (float, int))
             else state_as_number(new_state)
             )
-    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", "version:{__version__}"]
+    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{__version__}"]
     unit = None
     if "friendly_name" in new_state.attributes:
         tags.append(f"friendly_name:{new_state.attributes['friendly_name']}")
