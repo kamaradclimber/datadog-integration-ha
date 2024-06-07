@@ -71,12 +71,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 PREFIX = "hass"
 
 def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
-    _LOGGER.info("Receive new state change")
-    _LOGGER.info(event)
-
     new_state = event.data["new_state"]
     if new_state is None:
-        _LOGGER.warn("This event has no new state, isn't it strange?")
+        _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
         return
     domain = new_state.domain if new_state.domain else new_state.entity_id.split(".")[0]
     metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
