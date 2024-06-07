@@ -1,0 +1,13 @@
+{
+  "domain": "datadog_api",
+  "name": "Datadog via API",
+  "codeowners": ["@kamaradclimber"],
+  "config_flow": true,
+  "documentation": "https://github.com/kamaradclimber/datadog-integration-ha",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/kamaradclimber/datadog-integration-ha/issues",
+  "requirements": [
+  ],
+  "version": "0.1.0"
+}

@@ -1,0 +1,12 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+        },
+        "description": "No setup is required",
+        "title": "Setup datadog integration"
+      }
+    }
+  }
+}
