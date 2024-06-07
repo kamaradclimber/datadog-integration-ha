@@ -3,8 +3,10 @@
     "step": {
       "user": {
         "data": {
+          "api_key": "API Key",
+          "site": "Datadog Site"
         },
-        "description": "No setup is required",
+        "description": "Enter datadog app credentials",
         "title": "Setup datadog integration"
       }
     }
