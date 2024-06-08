@@ -74,12 +74,18 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     new_state = event.data["new_state"]
     assert new_state is not None
     state = new_state.state
+    if new_state.state in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "False", "None", None]:
+        return None
     if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP:
         try:
             timestamp = datetime.datetime.strptime(new_state.state, "%Y-%m-%dT%H:%M:%S%z").timestamp()
             return timestamp
         except ValueError:
             _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
+    if new_state.state in ["Unprotected", "dead"]:
+        return 0
+    if new_state.state == "alive":
+        return 1
     try:
         state_as_number(new_state)
     except:
