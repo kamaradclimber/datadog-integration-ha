@@ -1,5 +1,6 @@
 import logging
 from functools import partial
+from typing import Optional
 
 
 from datadog_api_client import ApiClient, Configuration
@@ -69,6 +70,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 PREFIX = "hass"
 
+def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
+    new_state = event.data["new_state"]
+    state = new_state.state
+    try:
+        state_as_number(new_state)
+    except:
+        # we cannot treat this kind of event
+        _LOGGER.warn(f"Cannot treat this state changed event: {event} to convert to metric")
+        return None
+    if isinstance(state, (float, int)):
+        return state
+    return state_as_number(new_state)
+
 def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
@@ -76,18 +90,10 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
         return
     domain = new_state.domain if new_state.domain else new_state.entity_id.split(".")[0]
     metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
-    state = new_state.state
-    try:
-        state_as_number(new_state)
-    except:
-        # we cannot treat this kind of event
-        _LOGGER.warn(f"Cannot treat this state changed event: {event} to convert to metric")
+    value = extract_state(event)
+    if value is None:
         return
-    value = (
-            state
-            if isinstance(state, (float, int))
-            else state_as_number(new_state)
-            )
+
     tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{__version__}"]
     unit = None
     if "friendly_name" in new_state.attributes:
