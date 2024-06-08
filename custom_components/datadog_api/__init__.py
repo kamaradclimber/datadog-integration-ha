@@ -1,6 +1,7 @@
 import logging
 from functools import partial
 from typing import Optional
+import datetime
 
 
 from datadog_api_client import ApiClient, Configuration
@@ -16,12 +17,11 @@ from datadog_api_client.v1.api.events_api import EventsApi
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
 from homeassistant.const import Platform, EVENT_STATE_CHANGED, __version__
-from homeassistant.core import HomeAssistant, Event, EventStateChangedData, State
+from homeassistant.core import HomeAssistant, Event, EventStateChangedData
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
-from datetime import datetime
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.state import state_as_number
+from homeassistant.components.sensor.const import SensorDeviceClass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,7 +72,14 @@ PREFIX = "hass"
 
 def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     new_state = event.data["new_state"]
+    assert new_state is not None
     state = new_state.state
+    if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP:
+        try:
+            timestamp = datetime.datetime.strptime(new_state.state, "%Y-%m-%dT%H:%M:%S%z").timestamp()
+            return timestamp
+        except ValueError:
+            _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
     try:
         state_as_number(new_state)
     except:
