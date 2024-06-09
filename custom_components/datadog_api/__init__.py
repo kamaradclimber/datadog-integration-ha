@@ -98,7 +98,7 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     if isinstance(state, (float, int)):
         return state
     # let's ignore "known" string values
-    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode"]:
+    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny"]:
         return None
 
     # we can treat timestamps
@@ -118,7 +118,7 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
             _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
 
     # some values can reasonnably be converted to numeric value
-    if new_state.state.lower() in ["unprotected", "dead", "disabled"]:
+    if new_state.state.lower() in ["unprotected", "dead", "disabled", "inactive"]:
         return 0
     if new_state.state.lower() in ["alive", "ready", "enabled", "pending"]:
         return 1
@@ -128,8 +128,9 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
         return None
 
     # deal with entities whose state are a list of options
-    if "operation_list" in new_state.attributes and new_state.state in new_state.attributes["operation_list"]:
-        return None
+    for key in ["operation_list", "options"]:
+        if key in new_state.attributes and new_state.state in new_state.attributes[key]:
+            return None
 
     try:
         state_as_number(new_state)
