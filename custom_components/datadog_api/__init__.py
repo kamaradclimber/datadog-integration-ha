@@ -3,6 +3,7 @@ from functools import partial
 from typing import Optional
 import datetime
 import re
+import dateutil.parser
 
 
 from datadog_api_client import ApiClient, Configuration
@@ -104,6 +105,14 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP:
         try:
             timestamp = datetime.datetime.strptime(new_state.state, "%Y-%m-%dT%H:%M:%S%z").timestamp()
+            return timestamp
+        except ValueError:
+            _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
+
+    # we can treat things that look like timestamp
+    if re.match("20..-..-..T..:..:...+" ,new_state.state):
+        try:
+            timestamp = dateutil.parser.parse(new_state.state).timestamp()
             return timestamp
         except ValueError:
             _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")

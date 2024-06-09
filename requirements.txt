@@ -3,3 +3,4 @@ python-dateutil
 frozendict
 datadog_api_client[async]
 black
+python-dateutil

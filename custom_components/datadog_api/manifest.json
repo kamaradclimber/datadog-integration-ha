@@ -10,7 +10,8 @@
   "requirements": [
     "aiosonic==0.15.1",
     "datadog_api_client[async]==2.25.0",
-    "zstandard"
+    "zstandard",
+    "python-dateutil"
   ],
   "version": "0.1.0"
 }
