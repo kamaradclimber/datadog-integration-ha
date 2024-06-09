@@ -110,6 +110,9 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
         except ValueError:
             _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
 
+    if re.match("^input_datetime.+", new_state.entity_id) and new_state.attributes["timestamp"]:
+        return new_state.attributes["timestamp"]
+
     # we can treat things that look like timestamp
     if re.match("20..-..-..T..:..:...+" ,new_state.state):
         try:
