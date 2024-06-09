@@ -2,6 +2,7 @@ import logging
 from functools import partial
 from typing import Optional
 import datetime
+import re
 
 
 from datadog_api_client import ApiClient, Configuration
@@ -70,30 +71,51 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 PREFIX = "hass"
 
+def ignore_by_entity_id(event: Event[EventStateChangedData]) -> bool:
+    new_state = event.data["new_state"]
+    assert new_state is not None
+    if re.match(".+_version$", new_state.entity_id):
+        return True
+
+    return False
+
+
+# returns None if state cannot be convert to float and thus event should be ignored for metrics
 def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     new_state = event.data["new_state"]
     assert new_state is not None
     state = new_state.state
-    if new_state.state in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "False", "None", None]:
+    # if it already a number, that's the easy case
+    if isinstance(state, (float, int)):
+        return state
+    # let's ignore "known" string values
+    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", ""]:
         return None
+
+    # we can treat timestamps
     if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP:
         try:
             timestamp = datetime.datetime.strptime(new_state.state, "%Y-%m-%dT%H:%M:%S%z").timestamp()
             return timestamp
         except ValueError:
             _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
-    if new_state.state in ["Unprotected", "dead"]:
+
+    # some values can reasonnably be converted to numeric value
+    if new_state.state.lower() in ["unprotected", "dead", "disabled"]:
         return 0
-    if new_state.state == "alive":
+    if new_state.state.lower() in ["alive", "ready", "enabled"]:
         return 1
+
     try:
         state_as_number(new_state)
     except:
         # we cannot treat this kind of event
+
+        if ignore_by_entity_id(event):
+            return None
+
         _LOGGER.warn(f"Cannot treat this state changed event: {event} to convert to metric")
         return None
-    if isinstance(state, (float, int)):
-        return state
     return state_as_number(new_state)
 
 def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
