@@ -123,6 +123,14 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     if new_state.state.lower() in ["alive", "ready", "enabled", "pending"]:
         return 1
 
+    # looks like a ssid
+    if re.match("..:..:..:..:..:..", new_state.state):
+        return None
+
+    # deal with entities whose state are a list of options
+    if "operation_list" in new_state.attributes and new_state.state in new_state.attributes["operation_list"]:
+        return None
+
     try:
         state_as_number(new_state)
     except:
