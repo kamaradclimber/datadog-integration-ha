@@ -76,6 +76,14 @@ def ignore_by_entity_id(event: Event[EventStateChangedData]) -> bool:
     assert new_state is not None
     if re.match(".+_version$", new_state.entity_id):
         return True
+    if re.match("event.repair", new_state.entity_id):
+        return True
+    if re.match(".+airing_now_on_.+", new_state.entity_id):
+        return True
+    if re.match("sensor.time", new_state.entity_id):
+        return True
+    if re.match("sensor.date_time", new_state.entity_id):
+        return True
 
     return False
 
@@ -89,7 +97,7 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     if isinstance(state, (float, int)):
         return state
     # let's ignore "known" string values
-    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", ""]:
+    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode"]:
         return None
 
     # we can treat timestamps
@@ -103,7 +111,7 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     # some values can reasonnably be converted to numeric value
     if new_state.state.lower() in ["unprotected", "dead", "disabled"]:
         return 0
-    if new_state.state.lower() in ["alive", "ready", "enabled"]:
+    if new_state.state.lower() in ["alive", "ready", "enabled", "pending"]:
         return 1
 
     try:
