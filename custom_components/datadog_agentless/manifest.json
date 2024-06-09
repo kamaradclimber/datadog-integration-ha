@@ -1,6 +1,6 @@
 {
-  "domain": "datadog_api",
-  "name": "Datadog via API",
+  "domain": "datadog_agentless",
+  "name": "Datadog agentless",
   "codeowners": ["@kamaradclimber"],
   "config_flow": true,
   "documentation": "https://github.com/kamaradclimber/datadog-integration-ha",
