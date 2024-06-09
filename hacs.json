@@ -1,5 +1,5 @@
 {
-  "name": "Datadog via API",
+  "name": "Datadog Agentless",
   "render_readme": true,
   "homeassistant": "2024.5"
 }
