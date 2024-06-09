@@ -18,7 +18,8 @@ from datadog_api_client import ApiClient, Configuration
 from datadog_api_client.v1.api.events_api import EventsApi
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
-from homeassistant.const import Platform, EVENT_STATE_CHANGED, __version__
+from homeassistant.const import Platform, EVENT_STATE_CHANGED
+from homeassistant.const import __version__ as HAVERSION
 from homeassistant.core import HomeAssistant, Event, EventStateChangedData
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
@@ -155,7 +156,7 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
     if value is None:
         return
 
-    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{__version__}"]
+    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{HAVERSION}"]
     unit = None
     if "friendly_name" in new_state.attributes:
         tags.append(f"friendly_name:{new_state.attributes['friendly_name']}")
