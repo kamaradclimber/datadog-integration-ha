@@ -166,7 +166,7 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
     if value is None:
         return
 
-    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{HAVERSION}"]
+    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
     unit = None
     if "friendly_name" in new_state.attributes:
         tags.append(f"friendly_name:{new_state.attributes['friendly_name']}")
@@ -200,7 +200,7 @@ def full_all_event_listener(creds: dict, event: Event):
             # in addition we expect events about "metrics" to change more often than the others
             return
 
-    tags = ["service:home-assistant", f"version:{HAVERSION}", f"event_type:{event.event_type}"]
+    tags = ["service:home-assistant", f"version:{HAVERSION}", f"event_type:{event.event_type}", f"env:{creds['env']}"]
     if event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
         text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment)))
     else:
@@ -269,3 +269,10 @@ def generate_message(event: Event) -> str:
     else:
         _LOGGER.warn(f"Unhandled event type {event.event_type}, raise an issue on https://github.com/kamaradclimber/datadog-integration-ha/issues")
         return ""
+
+async def async_migrate_entry(hass, config_entry: ConfigEntry):
+    if config_entry.version == 1:
+        _LOGGER.warn("config entry is version 1, migrating to version 2")
+        new = {**config_entry.data}
+        new["env"] = "prod"
+        hass.config_entries.async_update_entry(config_entry, data=new, version=2)

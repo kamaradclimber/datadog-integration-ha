@@ -13,6 +13,7 @@ Installation is done through hacs (pending integration in default repository, th
 ## Configuration
 
 Add a new integration "datadog-agentless". You'll be asked to give an API key and the site (datadoghq.com or datadoghq.eu for instance).
+You'll also need to configure an environment, this will be passed as the `env` tag on all events/metrics. Suggested value is `prod`.
 
 ## Usage
 

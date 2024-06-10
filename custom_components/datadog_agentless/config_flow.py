@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self):
         """Initialize"""
@@ -58,5 +58,6 @@ class SetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=vol.Schema({
                 vol.Required("api_key"): str,
                 vol.Required("site"): str,
+                vol.Required("env"): str,
             })
         )

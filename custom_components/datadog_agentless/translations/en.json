@@ -3,6 +3,7 @@
     "step": {
       "user": {
         "data": {
+          "env": "Environment of this instance (dev/prod)",
           "api_key": "API Key",
           "site": "Datadog Site"
         },
