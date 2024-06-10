@@ -4,6 +4,8 @@ from typing import Optional
 import datetime
 import re
 import dateutil.parser
+import json
+import orjson
 
 
 from datadog_api_client import ApiClient, Configuration
@@ -18,8 +20,9 @@ from datadog_api_client import ApiClient, Configuration
 from datadog_api_client.v1.api.events_api import EventsApi
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
-from homeassistant.const import Platform, EVENT_STATE_CHANGED
+from homeassistant.const import Platform, EVENT_STATE_CHANGED, MATCH_ALL
 from homeassistant.const import __version__ as HAVERSION
+import homeassistant.const
 from homeassistant.core import HomeAssistant, Event, EventStateChangedData
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
@@ -46,6 +49,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     unsubscribe = hass.bus.async_listen(EVENT_STATE_CHANGED, event_listener)
     hass.data[DOMAIN][entry.entry_id]["unsubscribe_handler"] = unsubscribe
+
+    all_event_listener=partial(full_all_event_listener, entry.data)
+    unsubscribe_all_events = hass.bus.async_listen(MATCH_ALL, all_event_listener)
+    hass.data[DOMAIN][entry.entry_id]["unsubscribe_all_event_handler"] = unsubscribe_all_events
 
 
     return True
@@ -185,3 +192,80 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
             response = api_instance.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
             if len(response["errors"]) > 0:
                 _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
+
+def full_all_event_listener(creds: dict, event: Event):
+    if event.event_type == "state_changed":
+        if extract_state(event) is not None:
+            # those events will be converted to metric, no need to double send them
+            # in addition we expect events about "metrics" to change more often than the others
+            return
+
+    tags = ["service:home-assistant", f"version:{HAVERSION}", f"event_type:{event.event_type}"]
+    if event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
+        text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment)))
+    else:
+        text=json.dumps(event.as_dict())
+    event_request = EventCreateRequest(
+            date_happened=int(event.time_fired.timestamp()),
+            title=generate_message(event),
+            text=text,
+            tags=tags,
+    )
+
+    configuration = Configuration(
+            api_key={"apiKeyAuth": creds["api_key"],
+                     },
+            server_variables={"site": creds["site"]},
+            request_timeout=5,
+            enable_retry=True,
+            )
+    with ApiClient(configuration) as api_client:
+        api_instance = EventsApi(api_client)
+        response = api_instance.create_event(body=event_request)
+        if response.status != "ok":
+            _LOGGER.error(f"Error sending event to Datadog {response["errors"]}")
+
+def generate_message(event: Event) -> str:
+    if event.event_type == homeassistant.const.EVENT_CALL_SERVICE:
+        return "Called service"
+    elif event.event_type == homeassistant.const.EVENT_COMPONENT_LOADED:
+        return "Loaded component"
+    elif event.event_type == homeassistant.const.EVENT_CORE_CONFIG_UPDATE:
+        return "Config updated"
+    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_CLOSE:
+        return "Home-Assistant closing"
+    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_START:
+        return "Home Assistant starting"
+    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_STARTED:
+        return "Home Assistant started"
+    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_STOP:
+        return "Home Assistant stopping"
+    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_FINAL_WRITE:
+        return "Home Assistant making final write"
+    elif event.event_type == homeassistant.const.EVENT_LOGBOOK_ENTRY:
+        return "Added an entry to logbook"
+    elif event.event_type == homeassistant.const.EVENT_LOGGING_CHANGED:
+        return "Changed logging level"
+    elif event.event_type == homeassistant.const.EVENT_SERVICE_REGISTERED:
+        return "Registered a service"
+    elif event.event_type == homeassistant.const.EVENT_SERVICE_REMOVED:
+        return "De-registered a service"
+    elif event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
+        return "State changed"
+    elif event.event_type == homeassistant.const.EVENT_STATE_REPORTED:
+        return "State reported"
+    elif event.event_type == homeassistant.const.EVENT_THEMES_UPDATED:
+        return "Themes updated"
+    elif event.event_type == homeassistant.const.EVENT_PANELS_UPDATED:
+        return "Panels updated"
+    elif event.event_type == homeassistant.const.EVENT_LOVELACE_UPDATED:
+        return "Lovelace updated"
+    elif event.event_type == homeassistant.const.EVENT_RECORDER_5MIN_STATISTICS_GENERATED:
+        return "5min statistics generated"
+    elif event.event_type == homeassistant.const.EVENT_RECORDER_HOURLY_STATISTICS_GENERATED:
+        return "hourly statistics generated"
+    elif event.event_type == homeassistant.const.EVENT_SHOPPING_LIST_UPDATED:
+        return "shopping list updated"
+    else:
+        _LOGGER.warn(f"Unhandled event type {event.event_type}, raise an issue on https://github.com/kamaradclimber/datadog-integration-ha/issues")
+        return ""

@@ -16,6 +16,6 @@ Add a new integration "datadog-agentless". You'll be asked to give an API key an
 
 ## Usage
 
-This integration does not expose any sensor at the moment. It sends metrics to datadog under the prefix `hass` for instance `hass.sensor`.
+This integration does not expose any sensor at the moment. It sends metrics to datadog under the prefix `hass` for instance `hass.sensor`. It also sends events that cannot be converted to metrics as event.
 
 It adds a few tags such as `service:home-assistant` and `version:<your ha version>`.
