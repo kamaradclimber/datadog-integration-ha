@@ -21,6 +21,8 @@ from datadog_api_client.v1.api.events_api import EventsApi
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
 from homeassistant.const import Platform, EVENT_STATE_CHANGED, MATCH_ALL
+from homeassistant.helpers.device_registry import EVENT_DEVICE_REGISTRY_UPDATED
+from homeassistant.components.automation import EVENT_AUTOMATION_TRIGGERED
 from homeassistant.const import __version__ as HAVERSION
 import homeassistant.const
 from homeassistant.core import HomeAssistant, Event, EventStateChangedData
@@ -228,10 +230,19 @@ def full_all_event_listener(creds: dict, event: Event):
 
 def generate_message(event: Event) -> Tuple[str, list[str]]:
     tags = []
+    def enrich(data_key):
+        if data_key in event.data:
+            tags.append(f"{data_key}:{event.data[data_key]}")
+
     tags.append(f"origin:{event.origin}")
+    tags.append(f"user_id:{event.context.user_id}")
+    tags.append(f"parent_id:{event.context.parent_id}")
     if event.event_type == homeassistant.const.EVENT_CALL_SERVICE:
+        enrich("domain")
+        enrich("service")
         return ("Called service", tags)
     elif event.event_type == homeassistant.const.EVENT_COMPONENT_LOADED:
+        enrich("component")
         return ("Loaded component", tags)
     elif event.event_type == homeassistant.const.EVENT_CORE_CONFIG_UPDATE:
         return ("Config updated", tags)
@@ -250,6 +261,8 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
     elif event.event_type == homeassistant.const.EVENT_LOGGING_CHANGED:
         return ("Changed logging level", tags)
     elif event.event_type == homeassistant.const.EVENT_SERVICE_REGISTERED:
+        enrich("domain")
+        enrich("service")
         return ("Registered a service", tags)
     elif event.event_type == homeassistant.const.EVENT_SERVICE_REMOVED:
         return ("De-registered a service", tags)
@@ -273,6 +286,15 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
         return ("hourly statistics generated", tags)
     elif event.event_type == homeassistant.const.EVENT_SHOPPING_LIST_UPDATED:
         return ("shopping list updated", tags)
+    elif event.event_type == EVENT_DEVICE_REGISTRY_UPDATED:
+        enrich("device_id")
+        enrich("action")
+        return ("device_registry_updated", tags)
+    elif event.event_type == EVENT_AUTOMATION_TRIGGERED:
+        enrich("source")
+        enrich("entity_id")
+        enrich("name")
+        return ("automation_triggered", tags)
     else:
         _LOGGER.warn(f"Unhandled event type {event.event_type}, raise an issue on https://github.com/kamaradclimber/datadog-integration-ha/issues")
         return ("", tags)
