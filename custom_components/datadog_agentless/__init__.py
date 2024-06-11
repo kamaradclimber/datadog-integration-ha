@@ -1,6 +1,6 @@
 import logging
 from functools import partial
-from typing import Optional
+from typing import Optional, Tuple
 import datetime
 import re
 import dateutil.parser
@@ -205,11 +205,12 @@ def full_all_event_listener(creds: dict, event: Event):
         text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment)))
     else:
         text=json.dumps(event.as_dict())
+    title, event_specific_tags = generate_message(event)
     event_request = EventCreateRequest(
             date_happened=int(event.time_fired.timestamp()),
-            title=generate_message(event),
+            title=title,
             text=text,
-            tags=tags,
+            tags=tags + event_specific_tags,
     )
 
     configuration = Configuration(
@@ -225,50 +226,56 @@ def full_all_event_listener(creds: dict, event: Event):
         if response.status != "ok":
             _LOGGER.error(f"Error sending event to Datadog {response["errors"]}")
 
-def generate_message(event: Event) -> str:
+def generate_message(event: Event) -> Tuple[str, list[str]]:
+    tags = []
+    tags.append(f"origin:{event.origin}")
     if event.event_type == homeassistant.const.EVENT_CALL_SERVICE:
-        return "Called service"
+        return ("Called service", tags)
     elif event.event_type == homeassistant.const.EVENT_COMPONENT_LOADED:
-        return "Loaded component"
+        return ("Loaded component", tags)
     elif event.event_type == homeassistant.const.EVENT_CORE_CONFIG_UPDATE:
-        return "Config updated"
+        return ("Config updated", tags)
     elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_CLOSE:
-        return "Home-Assistant closing"
+        return ("Home-Assistant closing", tags)
     elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_START:
-        return "Home Assistant starting"
+        return ("Home Assistant starting", tags)
     elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_STARTED:
-        return "Home Assistant started"
+        return ("Home Assistant started", tags)
     elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_STOP:
-        return "Home Assistant stopping"
+        return ("Home Assistant stopping", tags)
     elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_FINAL_WRITE:
-        return "Home Assistant making final write"
+        return ("Home Assistant making final write", tags)
     elif event.event_type == homeassistant.const.EVENT_LOGBOOK_ENTRY:
-        return "Added an entry to logbook"
+        return ("Added an entry to logbook", tags)
     elif event.event_type == homeassistant.const.EVENT_LOGGING_CHANGED:
-        return "Changed logging level"
+        return ("Changed logging level", tags)
     elif event.event_type == homeassistant.const.EVENT_SERVICE_REGISTERED:
-        return "Registered a service"
+        return ("Registered a service", tags)
     elif event.event_type == homeassistant.const.EVENT_SERVICE_REMOVED:
-        return "De-registered a service"
+        return ("De-registered a service", tags)
     elif event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
-        return "State changed"
+        if "old_state" in event.data:
+            tags.append(f"entity_id:{event.data["old_state"]}")
+        if "new_state" in event.data:
+            tags.append(f"entity_id:{event.data["new_state"]}")
+        return ("State changed", list(set(tags)))
     elif event.event_type == homeassistant.const.EVENT_STATE_REPORTED:
-        return "State reported"
+        return ("State reported", tags)
     elif event.event_type == homeassistant.const.EVENT_THEMES_UPDATED:
-        return "Themes updated"
+        return ("Themes updated", tags)
     elif event.event_type == homeassistant.const.EVENT_PANELS_UPDATED:
-        return "Panels updated"
+        return ("Panels updated", tags)
     elif event.event_type == homeassistant.const.EVENT_LOVELACE_UPDATED:
-        return "Lovelace updated"
+        return ("Lovelace updated", tags)
     elif event.event_type == homeassistant.const.EVENT_RECORDER_5MIN_STATISTICS_GENERATED:
-        return "5min statistics generated"
+        return ("5min statistics generated", tags)
     elif event.event_type == homeassistant.const.EVENT_RECORDER_HOURLY_STATISTICS_GENERATED:
-        return "hourly statistics generated"
+        return ("hourly statistics generated", tags)
     elif event.event_type == homeassistant.const.EVENT_SHOPPING_LIST_UPDATED:
-        return "shopping list updated"
+        return ("shopping list updated", tags)
     else:
         _LOGGER.warn(f"Unhandled event type {event.event_type}, raise an issue on https://github.com/kamaradclimber/datadog-integration-ha/issues")
-        return ""
+        return ("", tags)
 
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     if config_entry.version == 1:
