@@ -244,48 +244,16 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
     elif event.event_type == homeassistant.const.EVENT_COMPONENT_LOADED:
         enrich("component")
         return ("Loaded component", tags)
-    elif event.event_type == homeassistant.const.EVENT_CORE_CONFIG_UPDATE:
-        return ("Config updated", tags)
-    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_CLOSE:
-        return ("Home-Assistant closing", tags)
-    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_START:
-        return ("Home Assistant starting", tags)
-    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_STARTED:
-        return ("Home Assistant started", tags)
-    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_STOP:
-        return ("Home Assistant stopping", tags)
-    elif event.event_type == homeassistant.const.EVENT_HOMEASSISTANT_FINAL_WRITE:
-        return ("Home Assistant making final write", tags)
-    elif event.event_type == homeassistant.const.EVENT_LOGBOOK_ENTRY:
-        return ("Added an entry to logbook", tags)
-    elif event.event_type == homeassistant.const.EVENT_LOGGING_CHANGED:
-        return ("Changed logging level", tags)
     elif event.event_type == homeassistant.const.EVENT_SERVICE_REGISTERED:
         enrich("domain")
         enrich("service")
         return ("Registered a service", tags)
-    elif event.event_type == homeassistant.const.EVENT_SERVICE_REMOVED:
-        return ("De-registered a service", tags)
     elif event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
-        if "old_state" in event.data:
-            tags.append(f"entity_id:{event.data["old_state"]}")
-        if "new_state" in event.data:
-            tags.append(f"entity_id:{event.data["new_state"]}")
+        if "old_state" in event.data and event.data["old_state"] is not None:
+            tags.append(f"entity_id:{event.data["old_state"].entity_id}")
+        if "new_state" in event.data and event.data["new_state"] is not None:
+            tags.append(f"entity_id:{event.data["new_state"].entity_id}")
         return ("State changed", list(set(tags)))
-    elif event.event_type == homeassistant.const.EVENT_STATE_REPORTED:
-        return ("State reported", tags)
-    elif event.event_type == homeassistant.const.EVENT_THEMES_UPDATED:
-        return ("Themes updated", tags)
-    elif event.event_type == homeassistant.const.EVENT_PANELS_UPDATED:
-        return ("Panels updated", tags)
-    elif event.event_type == homeassistant.const.EVENT_LOVELACE_UPDATED:
-        return ("Lovelace updated", tags)
-    elif event.event_type == homeassistant.const.EVENT_RECORDER_5MIN_STATISTICS_GENERATED:
-        return ("5min statistics generated", tags)
-    elif event.event_type == homeassistant.const.EVENT_RECORDER_HOURLY_STATISTICS_GENERATED:
-        return ("hourly statistics generated", tags)
-    elif event.event_type == homeassistant.const.EVENT_SHOPPING_LIST_UPDATED:
-        return ("shopping list updated", tags)
     elif event.event_type == EVENT_DEVICE_REGISTRY_UPDATED:
         enrich("device_id")
         enrich("action")
@@ -296,8 +264,7 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
         enrich("name")
         return ("automation_triggered", tags)
     else:
-        _LOGGER.warn(f"Unhandled event type {event.event_type}, raise an issue on https://github.com/kamaradclimber/datadog-integration-ha/issues")
-        return ("", tags)
+        return (str(event.event_type), tags)
 
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     if config_entry.version == 1:
