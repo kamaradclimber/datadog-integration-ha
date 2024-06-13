@@ -102,7 +102,8 @@ def ignore_by_entity_id(event: Event[EventStateChangedData]) -> bool:
 # returns None if state cannot be convert to float and thus event should be ignored for metrics
 def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     new_state = event.data["new_state"]
-    assert new_state is not None
+    if new_state is None:
+        return None
     state = new_state.state
     # if it already a number, that's the easy case
     if isinstance(state, (float, int)):
@@ -253,6 +254,9 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
             tags.append(f"entity_id:{event.data["old_state"].entity_id}")
         if "new_state" in event.data and event.data["new_state"] is not None:
             tags.append(f"entity_id:{event.data["new_state"].entity_id}")
+        state_tag = build_state_tag(event)
+        if state_tag is not None:
+            tags.append(f"new_state:{state_tag}")
         return ("State changed", list(set(tags)))
     elif event.event_type == EVENT_DEVICE_REGISTRY_UPDATED:
         enrich("device_id")
@@ -265,6 +269,23 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
         return ("automation_triggered", tags)
     else:
         return (str(event.event_type), tags)
+
+def build_state_tag(event) -> Optional[str]:
+    if extract_state(event) is not None:
+        return None
+    if "new_state" not in event.data or event.data["new_state"] is None:
+        return None
+    new_state = event.data["new_state"]
+    if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP:
+        return None
+    for key in ["operation_list", "options"]:
+        if key in new_state.attributes and new_state.state in new_state.attributes[key]:
+            return new_state.state
+    if "icon" in new_state.attributes and re.match(".*clock.*", new_state.attributes["icon"]):
+        return None
+    if new_state.state == "":
+        return None
+    return new_state.state
 
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     if config_entry.version == 1:
