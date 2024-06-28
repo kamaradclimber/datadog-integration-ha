@@ -144,7 +144,7 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
     if isinstance(state, (float, int)):
         return state
     # let's ignore "known" string values
-    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny"]:
+    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
         return None
 
     # we can treat timestamps
