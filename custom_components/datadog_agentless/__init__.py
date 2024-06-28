@@ -6,6 +6,7 @@ import re
 import dateutil.parser
 import json
 import orjson
+from threading import Lock
 
 
 from datadog_api_client import ApiClient, Configuration
@@ -46,7 +47,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # subscribe to config updates
     entry.async_on_unload(entry.add_update_listener(update_entry))
     
-    event_listener=partial(full_event_listener, entry.data)
+    # we'll use that dictionary to store for each metric the last value and timestamp of last last event
+    constant_emitter = ConstantMetricEmitter()
+    
+    event_listener=partial(full_event_listener, entry.data, constant_emitter)
 
 
     unsubscribe = hass.bus.async_listen(EVENT_STATE_CHANGED, event_listener)
@@ -81,6 +85,37 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 PREFIX = "hass"
+
+
+class ConstantMetricEmitter:
+    def __init__(self):
+        self.last_sent = dict()
+        self.last_flush = int(datetime.datetime.now().timestamp())
+        self.flush_interval = 300
+        self.mutex = Lock()
+
+    def record_last_sent(self, metric: MetricSeries) -> None:
+        with self.mutex:
+            self.last_sent[(metric.metric, tuple(metric.tags))] = metric
+    
+    def flush_old_series(self) -> list[MetricSeries]:
+        with self.mutex:
+            now = int(datetime.datetime.now().timestamp())
+            old_series = []
+            for metric_id in self.last_sent:
+                serie = self.last_sent[metric_id]
+                if serie.points[0].timestamp < now - self.flush_interval:
+                    serie.points[0].timestamp = now
+                    _LOGGER.debug(f"Will flush {serie.metric} {serie.tags}")
+                    old_series.append(serie)
+            self.last_flush = now
+            _LOGGER.info(f"Flushing {len(old_series)} old metrics (out of {len(self.last_sent)}) to make sure we have regular points")
+            return old_series
+
+    def should_flush(self) -> bool:
+        now = int(datetime.datetime.now().timestamp())
+        return self.last_flush < now - self.flush_interval
+
 
 def ignore_by_entity_id(event: Event[EventStateChangedData]) -> bool:
     new_state = event.data["new_state"]
@@ -158,7 +193,7 @@ def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
         return None
     return state_as_number(new_state)
 
-def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
+def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
         _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
@@ -179,10 +214,17 @@ def full_event_listener(creds: dict, event: Event[EventStateChangedData]):
         # Ignore event if state is not number and cannot be converted to a number
         return
     if value is not None:
-        payload = MetricPayload(series=[
-            MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit,
+        metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit,
                            points=[MetricPoint(timestamp=int(timestamp.timestamp()), value=value)])
-        ])
+        series = [metric_serie]
+        constant_emitter.record_last_sent(metric_serie)
+        if constant_emitter.should_flush():
+            old_series = constant_emitter.flush_old_series()
+            for serie in old_series:
+                series.append(serie)
+
+
+        payload = MetricPayload(series=series)
         configuration = Configuration(
                 api_key={"apiKeyAuth": creds["api_key"],
                          },
