@@ -91,7 +91,7 @@ class ConstantMetricEmitter:
     def __init__(self):
         self.last_sent = dict()
         self.last_flush = int(datetime.datetime.now().timestamp())
-        self.flush_interval = 300
+        self.flush_interval = 900
         self.mutex = Lock()
 
     def record_last_sent(self, metric: MetricSeries) -> None:
