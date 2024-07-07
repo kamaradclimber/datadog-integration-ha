@@ -120,6 +120,8 @@ class ConstantMetricEmitter:
 def ignore_by_entity_id(entity_id: str) -> bool:
     if re.match(".+_version$", entity_id):
         return True
+    if re.match("^person.", entity_id):
+        return True
     if re.match("event.repair", entity_id):
         return True
     if re.match(".+airing_now_on_.+", entity_id):
@@ -127,6 +129,24 @@ def ignore_by_entity_id(entity_id: str) -> bool:
     if re.match("sensor.time", entity_id):
         return True
     if re.match("sensor.date_time", entity_id):
+        return True
+    if re.match(".+_friendly_?name", entity_id):
+        return True
+    if re.match(".+_unitofmeasurement", entity_id):
+        return True
+    if re.match(".+_deviceclass", entity_id):
+        return True
+    if re.match(".+_stateclass", entity_id):
+        return True
+    if re.match(".+_icon", entity_id):
+        return True
+    if re.match(".+_mode", entity_id):
+        return True
+    if re.match(".+_entity_?picture", entity_id):
+        return True
+    if re.match(".+_metertypename", entity_id):
+        return True
+    if re.match(".+_restored", entity_id):
         return True
 
     return False
@@ -139,7 +159,16 @@ def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,float]
     main_state = _extract_state(new_state, new_state.entity_id, new_state.state, True)
     if main_state:
         states.append((new_state.entity_id, main_state))
+    for key, value in new_state.attributes.items():
+        fake_id = new_state.entity_id + "_attribute_" + sanitize(key)
+        parsed_value = _extract_state(new_state, fake_id, value, False)
+        if parsed_value:
+            states.append((fake_id, parsed_value))
     return states
+
+def sanitize(key: str) -> str:
+    valid = set('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    return ''.join(filter(lambda x: x in valid, key))
 
 
 # returns None if state cannot be convert to float and thus event should be ignored for metrics
@@ -147,8 +176,12 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
     # if it already a number, that's the easy case
     if isinstance(value, (float, int)):
         return value
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return None
     # let's ignore "known" string values
-    if value.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
+    if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "false", "none", "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
         return None
 
     # we can treat timestamps
@@ -187,7 +220,8 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
 
     stubbed_state = State(entity_id, value)
     try:
-        state_as_number(stubbed_state)
+        number = state_as_number(stubbed_state)
+        return number
     except:
         # we cannot treat this kind of event
 
@@ -196,7 +230,6 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
 
         _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric")
         return None
-    return state_as_number(stubbed_state)
 
 def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
@@ -213,6 +246,8 @@ def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, ev
         tags = [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
         unit = None
         timestamp = new_state.last_changed
+        if isinstance(value, bool):
+            _LOGGER.warn(f"{name} has bool value? {value}")
         metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit,
                            points=[MetricPoint(timestamp=int(timestamp.timestamp()), value=value)])
         series.append(metric_serie)
