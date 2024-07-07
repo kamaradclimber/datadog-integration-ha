@@ -1,6 +1,6 @@
 import logging
 from functools import partial
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 import datetime
 import re
 import dateutil.parser
@@ -26,7 +26,7 @@ from homeassistant.helpers.device_registry import EVENT_DEVICE_REGISTRY_UPDATED
 from homeassistant.components.automation import EVENT_AUTOMATION_TRIGGERED
 from homeassistant.const import __version__ as HAVERSION
 import homeassistant.const
-from homeassistant.core import HomeAssistant, Event, EventStateChangedData
+from homeassistant.core import HomeAssistant, Event, EventStateChangedData, State
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
 from homeassistant.helpers.state import state_as_number
@@ -117,81 +117,86 @@ class ConstantMetricEmitter:
         return self.last_flush < now - self.flush_interval
 
 
-def ignore_by_entity_id(event: Event[EventStateChangedData]) -> bool:
-    new_state = event.data["new_state"]
-    assert new_state is not None
-    if re.match(".+_version$", new_state.entity_id):
+def ignore_by_entity_id(entity_id: str) -> bool:
+    if re.match(".+_version$", entity_id):
         return True
-    if re.match("event.repair", new_state.entity_id):
+    if re.match("event.repair", entity_id):
         return True
-    if re.match(".+airing_now_on_.+", new_state.entity_id):
+    if re.match(".+airing_now_on_.+", entity_id):
         return True
-    if re.match("sensor.time", new_state.entity_id):
+    if re.match("sensor.time", entity_id):
         return True
-    if re.match("sensor.date_time", new_state.entity_id):
+    if re.match("sensor.date_time", entity_id):
         return True
 
     return False
 
+def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,float]]:
+    new_state = event.data["new_state"]
+    states = []
+    if new_state is None:
+        return states
+    main_state = _extract_state(new_state, new_state.entity_id, new_state.state, True)
+    if main_state:
+        states.append((new_state.entity_id, main_state))
+    return states
+
 
 # returns None if state cannot be convert to float and thus event should be ignored for metrics
-def extract_state(event: Event[EventStateChangedData]) -> Optional[float]:
-    new_state = event.data["new_state"]
-    if new_state is None:
-        return None
-    state = new_state.state
+def _extract_state(new_state: State, entity_id: str, value: Any, main_state: bool) -> Optional[float]:
     # if it already a number, that's the easy case
-    if isinstance(state, (float, int)):
-        return state
+    if isinstance(value, (float, int)):
+        return value
     # let's ignore "known" string values
-    if new_state.state.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
+    if value.lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", False, "false", "none", None, "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
         return None
 
     # we can treat timestamps
-    if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP:
+    if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP and main_state:
         try:
-            timestamp = datetime.datetime.strptime(new_state.state, "%Y-%m-%dT%H:%M:%S%z").timestamp()
+            timestamp = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S%z").timestamp()
             return timestamp
         except ValueError:
-            _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
+            _LOGGER.warn(f"Unable to parse {value} as a timestamp")
 
     if re.match("^input_datetime.+", new_state.entity_id) and new_state.attributes["timestamp"]:
         return new_state.attributes["timestamp"]
 
     # we can treat things that look like timestamp
-    if re.match("20..-..-..T..:..:...+" ,new_state.state):
+    if re.match("20..-..-..T..:..:...+" ,value):
         try:
-            timestamp = dateutil.parser.parse(new_state.state).timestamp()
+            timestamp = dateutil.parser.parse(value).timestamp()
             return timestamp
         except ValueError:
-            _LOGGER.warn(f"Unable to parse {new_state.state} as a timestamp")
+            _LOGGER.warn(f"Unable to parse {value} as a timestamp, even if it looks like one")
 
     # some values can reasonnably be converted to numeric value
-    if new_state.state.lower() in ["unprotected", "dead", "disabled", "inactive"]:
+    if value.lower() in ["unprotected", "dead", "disabled", "inactive"]:
         return 0
-    if new_state.state.lower() in ["alive", "ready", "enabled", "pending"]:
+    if value.lower() in ["alive", "ready", "enabled", "pending"]:
         return 1
 
     # looks like a ssid
-    if re.match("..:..:..:..:..:..", new_state.state):
+    if re.match("..:..:..:..:..:..", value):
         return None
 
     # deal with entities whose state are a list of options
     for key in ["operation_list", "options"]:
-        if key in new_state.attributes and new_state.state in new_state.attributes[key]:
+        if key in new_state.attributes and value in new_state.attributes[key]:
             return None
 
+    stubbed_state = State(entity_id, value)
     try:
-        state_as_number(new_state)
+        state_as_number(stubbed_state)
     except:
         # we cannot treat this kind of event
 
-        if ignore_by_entity_id(event):
+        if ignore_by_entity_id(entity_id):
             return None
 
-        _LOGGER.warn(f"Cannot treat this state changed event: {event} to convert to metric")
+        _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric")
         return None
-    return state_as_number(new_state)
+    return state_as_number(stubbed_state)
 
 def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
@@ -200,23 +205,17 @@ def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, ev
         return
     domain = new_state.domain if new_state.domain else new_state.entity_id.split(".")[0]
     metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
-    value = extract_state(event)
-    if value is None:
+    values = extract_states(event)
+    if len(values) == 0:
         return
-
-    tags = [f"entity:{new_state.entity_id}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
-    unit = None
-    if "friendly_name" in new_state.attributes:
-        tags.append(f"friendly_name:{new_state.attributes['friendly_name']}")
-        unit = (new_state.attributes["unit_of_measurement"] if "unit_of_measurement" in new_state.attributes else None)
-    timestamp = new_state.last_changed
-    if value is None:
-        # Ignore event if state is not number and cannot be converted to a number
-        return
-    if value is not None:
+    series = []
+    for (name, value) in values:
+        tags = [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
+        unit = None
+        timestamp = new_state.last_changed
         metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit,
                            points=[MetricPoint(timestamp=int(timestamp.timestamp()), value=value)])
-        series = [metric_serie]
+        series.append(metric_serie)
         constant_emitter.record_last_sent(metric_serie)
         if constant_emitter.should_flush():
             old_series = constant_emitter.flush_old_series()
@@ -224,23 +223,23 @@ def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, ev
                 series.append(serie)
 
 
-        payload = MetricPayload(series=series)
-        configuration = Configuration(
-                api_key={"apiKeyAuth": creds["api_key"],
-                         },
-                server_variables={"site": creds["site"]},
-                request_timeout=5,
-                enable_retry=True,
-        )
-        with ApiClient(configuration) as api_client:
-            api_instance = MetricsApi(api_client)
-            response = api_instance.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
-            if len(response["errors"]) > 0:
-                _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
+    payload = MetricPayload(series=series)
+    configuration = Configuration(
+            api_key={"apiKeyAuth": creds["api_key"],
+                     },
+            server_variables={"site": creds["site"]},
+            request_timeout=5,
+            enable_retry=True,
+    )
+    with ApiClient(configuration) as api_client:
+        api_instance = MetricsApi(api_client)
+        response = api_instance.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
+        if len(response["errors"]) > 0:
+            _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
 
 def full_all_event_listener(creds: dict, event: Event):
     if event.event_type == "state_changed":
-        if extract_state(event) is not None:
+        if len(extract_states(event)) > 0:
             # those events will be converted to metric, no need to double send them
             # in addition we expect events about "metrics" to change more often than the others
             return
@@ -313,8 +312,6 @@ def generate_message(event: Event) -> Tuple[str, list[str]]:
         return (str(event.event_type), tags)
 
 def build_state_tag(event) -> Optional[str]:
-    if extract_state(event) is not None:
-        return None
     if "new_state" not in event.data or event.data["new_state"] is None:
         return None
     new_state = event.data["new_state"]
