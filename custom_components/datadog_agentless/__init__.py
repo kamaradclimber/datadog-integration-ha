@@ -196,7 +196,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
     if isinstance(value, datetime.datetime):
         return value.timestamp()
     # let's ignore "known" string values
-    if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "false", "none", "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
+    if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "false", "none", "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy", "brightness"]:
         return None
 
     # we can treat timestamps
@@ -219,9 +219,9 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
             _LOGGER.warn(f"Unable to parse {value} as a timestamp, even if it looks like one")
 
     # some values can reasonnably be converted to numeric value
-    if value.lower() in ["unprotected", "dead", "disabled", "inactive", "unlock"]:
+    if value.lower() in ["unprotected", "dead", "disabled", "inactive", "unlock", "off"]:
         return 0
-    if value.lower() in ["alive", "ready", "enabled", "pending", "lock"]:
+    if value.lower() in ["alive", "ready", "enabled", "pending", "lock", "on"]:
         return 1
 
     # looks like a ssid
