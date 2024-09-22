@@ -193,6 +193,8 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         return None
     if isinstance(value, (list, dict)):
         return None
+    if isinstance(value, datetime.datetime):
+        return value.timestamp()
     # let's ignore "known" string values
     if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "false", "none", "on/off", "off/on", "restore", "up", "down", "stop", "opening", "", "scene_mode", "sunny", "near", "far", "cloud", "partlycloudy"]:
         return None
