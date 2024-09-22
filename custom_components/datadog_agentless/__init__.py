@@ -67,7 +67,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsubscribe = hass.bus.async_listen(EVENT_STATE_CHANGED, event_listener)
     hass.data[DOMAIN][entry.entry_id]["unsubscribe_handler"] = unsubscribe
 
-    all_event_listener=partial(full_all_event_listener, entry.data)
+    events_api = EventsApi(api_client)
+
+    all_event_listener=partial(full_all_event_listener, entry.data, events_api, hass)
     unsubscribe_all_events = hass.bus.async_listen(MATCH_ALL, all_event_listener)
     hass.data[DOMAIN][entry.entry_id]["unsubscribe_all_event_handler"] = unsubscribe_all_events
 
@@ -271,7 +273,6 @@ def full_event_listener(metrics_api: MetricsApi, creds: dict, constant_emitter: 
 
 
     payload = MetricPayload(series=series)
-    response = metrics_api.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
     return asyncio.run_coroutine_threadsafe(send_metrics(metrics_api, payload), hass.loop)
 
 async def send_metrics(metrics_api, payload) -> None:
@@ -279,7 +280,7 @@ async def send_metrics(metrics_api, payload) -> None:
     if len(response["errors"]) > 0:
         _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
 
-def full_all_event_listener(creds: dict, event: Event):
+def full_all_event_listener(creds: dict, events_api: EventsApi, hass, event: Event):
     if event.event_type == "state_changed":
         if len(extract_states(event)) > 0:
             # those events will be converted to metric, no need to double send them
@@ -298,19 +299,13 @@ def full_all_event_listener(creds: dict, event: Event):
             text=text,
             tags=tags + event_specific_tags,
     )
+    return asyncio.run_coroutine_threadsafe(send_events(events_api, event_request), hass.loop)
 
-    configuration = Configuration(
-            api_key={"apiKeyAuth": creds["api_key"],
-                     },
-            server_variables={"site": creds["site"]},
-            request_timeout=5,
-            enable_retry=True,
-            )
-    with ApiClient(configuration) as api_client:
-        api_instance = EventsApi(api_client)
-        response = api_instance.create_event(body=event_request)
-        if response.status != "ok":
-            _LOGGER.error(f"Error sending event to Datadog {response["errors"]}")
+async def send_events(events_api, event_request) -> None:
+    response = await events_api.create_event(body=event_request)
+    if response.status != "ok":
+        _LOGGER.error(f"Error sending event to Datadog {response["errors"]}")
+
 
 def generate_message(event: Event) -> Tuple[str, list[str]]:
     tags = []
