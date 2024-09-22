@@ -260,7 +260,6 @@ def full_event_listener(metrics_api: MetricsApi, creds: dict, constant_emitter: 
         unit = None
         timestamp = new_state.last_changed
         if isinstance(value, bool):
-            _LOGGER.warn(f"{name} has bool value? {value}")
             value = int(value)
         metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit,
                            points=[MetricPoint(timestamp=int(timestamp.timestamp()), value=value)])
