@@ -7,9 +7,10 @@ import dateutil.parser
 import json
 import orjson
 from threading import Lock
+import asyncio
 
 
-from datadog_api_client import ApiClient, Configuration
+from datadog_api_client import AsyncApiClient, ApiClient, Configuration
 from datadog_api_client.v2.api.metrics_api import MetricsApi
 from datadog_api_client.v2.model.metric_content_encoding import MetricContentEncoding
 from datadog_api_client.v2.model.metric_intake_type import MetricIntakeType
@@ -17,7 +18,6 @@ from datadog_api_client.v2.model.metric_payload import MetricPayload
 from datadog_api_client.v2.model.metric_point import MetricPoint
 from datadog_api_client.v2.model.metric_series import MetricSeries
 
-from datadog_api_client import ApiClient, Configuration
 from datadog_api_client.v1.api.events_api import EventsApi
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
@@ -49,8 +49,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # we'll use that dictionary to store for each metric the last value and timestamp of last last event
     constant_emitter = ConstantMetricEmitter()
+
+    creds = entry.data
+    configuration = Configuration(
+            api_key={"apiKeyAuth": creds["api_key"],
+                     },
+            server_variables={"site": creds["site"]},
+            request_timeout=5,
+            enable_retry=True,
+    )
+    api_client = AsyncApiClient(configuration)
+    metrics_api = MetricsApi(api_client)
     
-    event_listener=partial(full_event_listener, entry.data, constant_emitter)
+    event_listener=partial(full_event_listener, metrics_api, entry.data, constant_emitter, hass)
 
 
     unsubscribe = hass.bus.async_listen(EVENT_STATE_CHANGED, event_listener)
@@ -231,7 +242,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric")
         return None
 
-def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, event: Event[EventStateChangedData]):
+def full_event_listener(metrics_api: MetricsApi, creds: dict, constant_emitter: ConstantMetricEmitter, hass, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
         _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
@@ -259,18 +270,13 @@ def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, ev
 
 
     payload = MetricPayload(series=series)
-    configuration = Configuration(
-            api_key={"apiKeyAuth": creds["api_key"],
-                     },
-            server_variables={"site": creds["site"]},
-            request_timeout=5,
-            enable_retry=True,
-    )
-    with ApiClient(configuration) as api_client:
-        api_instance = MetricsApi(api_client)
-        response = api_instance.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
-        if len(response["errors"]) > 0:
-            _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
+    response = metrics_api.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
+    return asyncio.run_coroutine_threadsafe(send_metrics(metrics_api, payload), hass.loop)
+
+async def send_metrics(metrics_api, payload) -> None:
+    response = await metrics_api.submit_metrics(content_encoding=MetricContentEncoding.ZSTD1, body=payload)
+    if len(response["errors"]) > 0:
+        _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
 
 def full_all_event_listener(creds: dict, event: Event):
     if event.event_type == "state_changed":
