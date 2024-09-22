@@ -219,9 +219,9 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
             _LOGGER.warn(f"Unable to parse {value} as a timestamp, even if it looks like one")
 
     # some values can reasonnably be converted to numeric value
-    if value.lower() in ["unprotected", "dead", "disabled", "inactive"]:
+    if value.lower() in ["unprotected", "dead", "disabled", "inactive", "unlock"]:
         return 0
-    if value.lower() in ["alive", "ready", "enabled", "pending"]:
+    if value.lower() in ["alive", "ready", "enabled", "pending", "lock"]:
         return 1
 
     # looks like a ssid
@@ -237,13 +237,13 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
     try:
         number = state_as_number(stubbed_state)
         return number
-    except:
+    except Exception as e:
         # we cannot treat this kind of event
 
         if ignore_by_entity_id(entity_id):
             return None
 
-        _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric")
+        _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric. Error was: %s", e)
         return None
 
 def full_event_listener(metrics_api: MetricsApi, creds: dict, constant_emitter: ConstantMetricEmitter, hass, event: Event[EventStateChangedData]):
