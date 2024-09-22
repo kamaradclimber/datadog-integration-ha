@@ -195,6 +195,11 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         return None
     if isinstance(value, datetime.datetime):
         return value.timestamp()
+    if isinstance(value, tuple):
+        if entity_id in ['hs_color', 'rgb_color', 'xy_color']:
+            # ignore multivalue colors
+            return
+        _LOGGER.warn(f"Hard to convert value {value} which is a tuple to a single value (entity: {entity_id})")
     # let's ignore "known" string values
     if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "on/off", "off/on", "restore", "stop", "opening", "", "scene_mode", "sunny", "cloud", "partlycloudy", "brightness"]:
         return None
