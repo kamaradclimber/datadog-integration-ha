@@ -161,6 +161,9 @@ def ignore_by_entity_id(entity_id: str) -> bool:
         return True
     if re.match(".+_restored", entity_id):
         return True
+    # powercalc attributes
+    if re.match(".+_device_power_attribute_.+", entity_id):
+        return True
 
     return False
 
