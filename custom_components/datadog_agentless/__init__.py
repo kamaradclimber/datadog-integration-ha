@@ -247,7 +247,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         if key in new_state.attributes and value in new_state.attributes[key]:
             return None
 
-    stubbed_state = State(entity_id, value)
+    stubbed_state = State(entity_id, value[:250])
     try:
         number = state_as_number(stubbed_state)
         return number
