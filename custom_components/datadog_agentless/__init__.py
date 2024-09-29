@@ -209,6 +209,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
             # ignore multivalue colors
             return
         _LOGGER.warn(f"Hard to convert value {value} which is a tuple to a single value (entity: {entity_id})")
+        return
     # let's ignore "known" string values
     if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "on/off", "off/on", "restore", "stop", "opening", "", "scene_mode", "sunny", "cloud", "partlycloudy", "brightness"]:
         return None
