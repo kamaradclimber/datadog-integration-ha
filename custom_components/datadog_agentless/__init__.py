@@ -208,6 +208,9 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         if entity_id in ['hs_color', 'rgb_color', 'xy_color']:
             # ignore multivalue colors
             return
+        if re.match("^light.wled_.+color", entity_id ):
+            # ignore multivalue colors
+            return
         _LOGGER.warn(f"Hard to convert value {value} which is a tuple to a single value (entity: {entity_id})")
         return
     # let's ignore "known" string values
