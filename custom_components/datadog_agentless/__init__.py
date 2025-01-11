@@ -348,9 +348,9 @@ def full_all_event_listener(creds: dict, events_queue, event: Event):
 
     tags = ["service:home-assistant", f"version:{HAVERSION}", f"event_type:{event.event_type}", f"env:{creds['env']}"]
     if event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
-        text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment)))
+        text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment, default=str)))
     else:
-        text=json.dumps(event.as_dict())
+        text=json.dumps(event.as_dict(), default=str)
     title, event_specific_tags = generate_message(event)
     event_request = EventCreateRequest(
             date_happened=int(event.time_fired.timestamp()),
