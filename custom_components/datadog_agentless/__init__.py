@@ -340,6 +340,12 @@ def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, me
         constant_emitter.record_last_sent(metric_serie)
 
 def full_all_event_listener(creds: dict, events_queue, event: Event):
+    try:
+        unsafe_full_all_event_listener(creds, events_queue, event)
+    except:
+        _LOGGER.exception(f"An error occured in the event listener")
+
+def unsafe_full_all_event_listener(creds: dict, events_queue, event: Event):
     if event.event_type == "state_changed":
         if len(extract_states(event)) > 0:
             # those events will be converted to metric, no need to double send them
@@ -348,7 +354,7 @@ def full_all_event_listener(creds: dict, events_queue, event: Event):
 
     tags = ["service:home-assistant", f"version:{HAVERSION}", f"event_type:{event.event_type}", f"env:{creds['env']}"]
     if event.event_type == homeassistant.const.EVENT_STATE_CHANGED:
-        text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment, default=str)))
+        text=json.dumps(orjson.loads(orjson.dumps(event.json_fragment)), default=str)
     else:
         text=json.dumps(event.as_dict(), default=str)
     title, event_specific_tags = generate_message(event)
