@@ -127,7 +127,7 @@ async def send_metrics_loop(queue, metrics_api, constant_emitter):
                 if len(response["errors"]) > 0:
                     _LOGGER.error(f"Error sending metric to Datadog {response['errors'][0]}")
         except Exception as e:
-            _LOGGER.error(e)
+            _LOGGER.exception(f"An error happened when sending metrics to dd: {e}")
     _LOGGER.debug("Metrics queue is now empty, waiting for next run")
 
 
