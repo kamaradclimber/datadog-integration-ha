@@ -103,7 +103,7 @@ async def send_events_loop(queue, events_api):
             if response.status != "ok":
                 _LOGGER.error(f"Error sending event to Datadog {response["errors"]}")
         except Exception as e:
-            _LOGGER.error(e)
+            _LOGGER.exception(f"An error happened when sending events to dd: {e}")
     _LOGGER.debug("Events queue is now empty, waiting for next run")
 
 # this function will constantly dequeue metrics to send them by batch to the dd api
