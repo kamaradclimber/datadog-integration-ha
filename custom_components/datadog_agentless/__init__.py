@@ -319,6 +319,12 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         return None
 
 def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
+    try:
+        unsafe_full_event_listener(creds, constant_emitter, metrics_queue, event)
+    except:
+        _LOGGER.exception(f"An error occured in event_state_changed callback")
+
+def unsafe_full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
         _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
