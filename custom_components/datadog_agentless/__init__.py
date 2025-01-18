@@ -233,7 +233,7 @@ def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,float]
     if new_state is None:
         return states
     main_state = _extract_state(new_state, new_state.entity_id, new_state.state, True)
-    if main_state:
+    if main_state is not None:
         states.append((new_state.entity_id, main_state))
     for key, value in new_state.attributes.items():
         fake_id = new_state.entity_id + "_attribute_" + sanitize(key)
