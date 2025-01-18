@@ -7,11 +7,10 @@ import dateutil.parser
 import json
 import orjson
 from threading import Lock
-import asyncio
 from queue import Queue
 
 
-from datadog_api_client import AsyncApiClient, ApiClient, Configuration
+from datadog_api_client import AsyncApiClient, Configuration
 from datadog_api_client.v2.api.metrics_api import MetricsApi
 from datadog_api_client.v2.model.metric_content_encoding import MetricContentEncoding
 from datadog_api_client.v2.model.metric_intake_type import MetricIntakeType
@@ -284,6 +283,12 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
 
     # we can treat things that look like timestamp
     if re.match("20..-..-..T..:..:...+" ,value):
+        try:
+            timestamp = dateutil.parser.parse(value).timestamp()
+            return timestamp
+        except ValueError:
+            _LOGGER.warn(f"Unable to parse {value} as a timestamp, even if it looks like one")
+    if re.match("20..-..-.." ,value):
         try:
             timestamp = dateutil.parser.parse(value).timestamp()
             return timestamp
