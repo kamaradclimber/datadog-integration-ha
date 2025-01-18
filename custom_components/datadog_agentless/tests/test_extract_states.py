@@ -1,4 +1,4 @@
-from os import path
+from os import path, environ
 import sys
 current_dir = path.dirname(__file__)
 parent_dir = path.dirname(current_dir)
@@ -58,6 +58,7 @@ class TestExtractStates(unittest.TestCase):
 
     def test_unusal_timeformat(self):
         event_raw_data = json.loads('{"event_type": "state_changed", "data": {"entity_id": "sensor.date_time", "old_state": {"entity_id": "sensor.date_time", "state": "2025-01-18, 14:48", "attributes": {"icon": "mdi:calendar-clock", "friendly_name": "Date & Time"}, "last_changed": "2025-01-18T13:48:00.001236+00:00", "last_reported": "2025-01-18T13:48:00.001920+00:00", "last_updated": "2025-01-18T13:48:00.001236+00:00", "context": {"id": "01JHWTQ9M1N3D9DRKD69211Q71", "parent_id": null, "user_id": null}}, "new_state": {"entity_id": "sensor.date_time", "state": "2025-01-18, 14:49", "attributes": {"icon": "mdi:calendar-clock", "friendly_name": "Date & Time"}, "last_changed": "2025-01-18T13:49:00.002321+00:00", "last_reported": "2025-01-18T13:49:00.002819+00:00", "last_updated": "2025-01-18T13:49:00.002321+00:00", "context": {"id": "01JHWTS4726GQE1520YT16JW75", "parent_id": null, "user_id": null}}}, "origin": "LOCAL", "time_fired": "2025-01-18T13:49:00.002321+00:00", "context": {"id": "01JHWTS4726GQE1520YT16JW75", "parent_id": null, "user_id": null}}')
+        environ['TZ'] = 'Europe/Paris'
         event = read_event(event_raw_data)
 
         states = extract_states(event)
