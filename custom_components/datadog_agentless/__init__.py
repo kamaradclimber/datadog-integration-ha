@@ -337,10 +337,13 @@ def unsafe_full_event_listener(creds: dict, constant_emitter: ConstantMetricEmit
     domain = new_state.domain if new_state.domain else new_state.entity_id.split(".")[0]
     metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
     values = extract_states(event)
+    friendly_name = new_state.attributes.get("friendly_name")
     if len(values) == 0:
         return
     for (name, value) in values:
         tags = [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
+        if friendly_name:
+            tags.append(f"friendly_name:{friendly_name}")
         unit = None
         timestamp = new_state.last_changed
         if isinstance(value, bool):
