@@ -226,25 +226,41 @@ def ignore_by_entity_id(entity_id: str) -> bool:
 
     return False
 
-def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,float]]:
+def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,Optional[str],float]]:
     new_state = event.data["new_state"]
     states = []
     if new_state is None:
         return states
     main_state = _extract_state(new_state, new_state.entity_id, new_state.state, True)
+    unit = _extract_unit(new_state, new_state.entity_id)
     if main_state is not None:
-        states.append((new_state.entity_id, main_state))
+        states.append((new_state.entity_id, unit, main_state))
     for key, value in new_state.attributes.items():
         fake_id = new_state.entity_id + "_attribute_" + sanitize(key)
         parsed_value = _extract_state(new_state, fake_id, value, False)
         if parsed_value:
-            states.append((fake_id, parsed_value))
+            states.append((fake_id, None, parsed_value))
     return states
 
 def sanitize(key: str) -> str:
     valid = set('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
     return ''.join(filter(lambda x: x in valid, key))
 
+def _extract_unit(new_state: State, entity_id: str) -> Optional[str]:
+    if "unit_of_measurement" in new_state.attributes:
+        unit = new_state.attributes["unit_of_measurement"]
+        # we only convert units that are single character, to increase readability
+        unit_str = {
+            "%": "percent",
+            "C": "degree_celcius",
+            "°C": "degree_celcius",
+            "W": "watt",
+        }.get(unit, sanitize(unit))
+        if unit_str == "":
+            _LOGGER.warning(f"Unit {unit} for {entity_id} cannot be sanitized properly, open a bug to the maintainer of this integration")
+            return None
+        return unit_str.lower()
+    return None
 
 # returns None if state cannot be convert to float and thus event should be ignored for metrics
 def _extract_state(new_state: State, entity_id: str, value: Any, main_state: bool) -> Optional[float]:
@@ -335,13 +351,18 @@ def unsafe_full_event_listener(creds: dict, constant_emitter: ConstantMetricEmit
         _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
         return
     domain = new_state.domain if new_state.domain else new_state.entity_id.split(".")[0]
-    metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
+    unitless_metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
     values = extract_states(event)
     friendly_name = new_state.attributes.get("friendly_name")
     if len(values) == 0:
         return
-    for (name, value) in values:
+    for (name, unit, value) in values:
         tags = [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
+        if unit is not None:
+            metric_name = f"{PREFIX}.{domain}".replace(" ", "_") + "_in_" + unit
+            _LOGGER.debug(f"Using {metric_name} instead of the unitless metric name")
+        else:
+            metric_name = unitless_metric_name
         if friendly_name:
             tags.append(f"friendly_name:{friendly_name}")
         unit = None
