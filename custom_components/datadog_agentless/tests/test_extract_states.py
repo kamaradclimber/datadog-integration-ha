@@ -53,7 +53,7 @@ class TestExtractStates(unittest.TestCase):
 
         states = extract_states(event)
         self.assertEqual(len(states), 1)
-        _, state = states[0]
+        _, _, state = states[0]
         self.assertEqual(state, 0)
 
     def test_unusal_timeformat(self):
@@ -63,7 +63,7 @@ class TestExtractStates(unittest.TestCase):
 
         states = extract_states(event)
         self.assertEqual(len(states), 1)
-        _, state = states[0]
+        _, _, state = states[0]
         self.assertEqual(state, 1737208140.0)
 
 
