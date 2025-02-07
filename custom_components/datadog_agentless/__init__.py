@@ -8,6 +8,7 @@ import json
 import orjson
 from threading import Lock
 from queue import Queue
+from collections.abc import Callable
 
 
 from datadog_api_client import AsyncApiClient, Configuration
@@ -226,7 +227,7 @@ def ignore_by_entity_id(entity_id: str) -> bool:
 
     return False
 
-def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,Optional[str],float]]:
+def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,Optional[Tuple[str, Callable]],float]]:
     new_state = event.data["new_state"]
     states = []
     if new_state is None:
@@ -246,20 +247,66 @@ def sanitize(key: str) -> str:
     valid = set('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
     return ''.join(filter(lambda x: x in valid, key))
 
-def _extract_unit(new_state: State, entity_id: str) -> Optional[str]:
+def ident(x):
+    return x
+
+
+UNITS = {
+        "%": ("percent", ident),
+        "°": ("degree", ident), # angles
+        "€": ("€", ident),
+        "€/kWh": ("euro_per_kWh", ident),
+        "A": ("ampere", ident),
+        "B": ("byte", ident),
+        "°C": ("degree_celcius", ident),
+        "c€": ("€", lambda x: x/100),
+        "c€/kWh": ("euro_per_kWh", lambda x: x/100),
+        "°C.day": ("degree_day", ident),
+        "clients": ("clients", ident),
+        "cm": ("meter", lambda x: x/100),
+        "EUR": ("euro", ident),
+        "EUR/kWh": ("eur_per_kWh", ident),
+        "gCO2eq": ("gram", ident),
+        "h": ("s", lambda x: x*3600),
+        "hPa": ("pascal", lambda x: x*100),
+        "Hz": ("hertz", ident),
+        "kg": ("gram", lambda x: x*1000),
+        "kgCO2": ("gram", lambda x: x*1000),
+        "km": ("meter", lambda x: x*1000),
+        "km/h": ("km_per_hour", ident),
+        "kW": ("watt", lambda x: x*1000),
+        "kWh": ("kWh", ident),
+        "L": ("liter", ident),
+        "lqi": ("lqi", ident),
+        "lx": ("lux", ident),
+        "m": ("meter", ident),
+        "m³": ("cubic_meter", ident),
+        "mA": ("ampere", lambda x: x/1000),
+        "min": ("second", lambda x: x*60),
+        "mm": ("meter", lambda x: x/1000),
+        "m/s": ("meter_per_second", ident),
+        "ms": ("second", lambda x: x/1000),
+        "R/min": ("rpm", ident),
+        "rpm": ("rpm", ident),
+        "s": ("second", ident),
+        "V": ("volt", ident),
+        "W": ("watt", ident),
+        "Wh": ("kWh", lambda x: x/1000),
+}
+
+
+def _extract_unit(new_state: State, entity_id: str) -> Optional[Tuple[str, Callable]]:
     if "unit_of_measurement" in new_state.attributes:
         unit = new_state.attributes["unit_of_measurement"]
         # we only convert units that are single character, to increase readability
-        unit_str = {
-            "%": "percent",
-            "C": "degree_celcius",
-            "°C": "degree_celcius",
-            "W": "watt",
-        }.get(unit, sanitize(unit))
+        resp = UNITS.get(unit, None)
+        if resp is None:
+            return None
+        unit_str, convert_func = resp
         if unit_str == "":
             _LOGGER.warning(f"Unit {unit} for {entity_id} cannot be sanitized properly, open a bug to the maintainer of this integration")
             return None
-        return unit_str.lower()
+        return unit_str.lower(), convert_func
     return None
 
 # returns None if state cannot be convert to float and thus event should be ignored for metrics
@@ -358,18 +405,20 @@ def unsafe_full_event_listener(creds: dict, constant_emitter: ConstantMetricEmit
         return
     for (name, unit, value) in values:
         tags = [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
+        unit_name = None
         if unit is not None:
-            metric_name = f"{PREFIX}.{domain}".replace(" ", "_") + "_in_" + unit
+            unit_name, conversion = unit
+            metric_name = f"{PREFIX}.{domain}".replace(" ", "_") + "_in_" + unit_name
             _LOGGER.debug(f"Using {metric_name} instead of the unitless metric name")
+            value = conversion(value)
         else:
             metric_name = unitless_metric_name
         if friendly_name:
             tags.append(f"friendly_name:{friendly_name}")
-        unit = None
         timestamp = new_state.last_changed
         if isinstance(value, bool):
             value = int(value)
-        metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit,
+        metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit_name,
                            points=[MetricPoint(timestamp=int(timestamp.timestamp()), value=value)])
         metrics_queue.put(metric_serie)
         constant_emitter.record_last_sent(metric_serie)
