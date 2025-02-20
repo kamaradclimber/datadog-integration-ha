@@ -8,10 +8,9 @@ The code is a fork of https://github.com/tjschiffer/hassio-addons 🙇.
 
 ## Installation
 
-Installation is done through hacs (pending integration in default repository, the installation can be done as a custom repository).
+Installation is done through hacs.
 
 1. Go to HACS page on your Home Assistant instance
-1. Add this repository (https://github.com/kamaradclimber/datadog-integration-ha) via HACS Custom repositories [How to add Custom Repositories](https://hacs.xyz/docs/faq/custom_repositories/)
 1. Select `Integration`
 1. Press add icon and search for `Datadog`
 1. Restart Home Assistant
