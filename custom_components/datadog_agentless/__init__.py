@@ -244,7 +244,7 @@ def extract_states(event: Event[EventStateChangedData]) -> list[Tuple[str,Option
     return states
 
 def sanitize(key: str) -> str:
-    valid = set('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    valid = set('0123456789abcdefghijklmnopqrstuvwxyz_')
     return ''.join(filter(lambda x: x in valid, key))
 
 def ident(x):
@@ -316,7 +316,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         return value
     if value is None:
         return None
-    if isinstance(value, (list, dict)):
+    if isinstance(value, (list, dict, set)):
         return None
     if isinstance(value, datetime.datetime):
         return value.timestamp()
