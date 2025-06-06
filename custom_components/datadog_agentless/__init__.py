@@ -24,6 +24,9 @@ from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
 from homeassistant.const import Platform, EVENT_STATE_CHANGED, MATCH_ALL, EVENT_HOMEASSISTANT_STOP
 from homeassistant.helpers.device_registry import EVENT_DEVICE_REGISTRY_UPDATED
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.components.automation import EVENT_AUTOMATION_TRIGGERED
 from homeassistant.const import __version__ as HAVERSION
@@ -72,7 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         metrics_cancel_schedule()
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, metrics_cancel_dequeuing)
 
-    event_listener=partial(full_event_listener, entry.data, constant_emitter, metrics_queue)
+    event_listener=partial(full_event_listener, entry.data, hass, constant_emitter, metrics_queue)
     unsubscribe = hass.bus.async_listen(EVENT_STATE_CHANGED, event_listener)
     hass.data[DOMAIN][entry.entry_id]["unsubscribe_handler"] = unsubscribe
 
@@ -386,13 +389,55 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric. Error was: %s", e)
         return None
 
-def full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
+def additional_tags(hass, new_state) -> list[str]:
+    """
+    Adds new tags if relevant based on labels of the entity
+    """
+    tags = []
+    entity_registry = er.async_get(hass)
+    entity = entity_registry.async_get(new_state.entity_id)
+    if entity is not None:
+        for l in entity.labels:
+            if ":" in l:
+                tags.append(l)
+            else:
+                tags.append(f"entity_label:{l}")
+        _LOGGER.debug(f"Added {len(entity.labels)} labels from entity")
+        area_id = None
+        device_registry = dr.async_get(hass)
+        if entity.device_id is not None:
+            device = device_registry.async_get(entity.device_id)
+            if device is not None:
+                for l in device.labels:
+                    if ":" in l:
+                        tags.append(l)
+                    else:
+                        tags.append(f"device_label:{l}")
+                area_id = device.area_id
+                _LOGGER.debug(f"Added {len(device.labels)} labels from device")
+        if entity.area_id is not None:
+            area_id = entity.area_id
+        if area_id is not None:
+            area_registry = ar.async_get(hass)
+            # area registry method access is not consistent, it should be async_get
+            area = area_registry.async_get_area(area_id)
+            if area is not None:
+                for l in area.labels:
+                    if ":" in l:
+                        tags.append(l)
+                    else:
+                        tags.append(f"device_label:{l}")
+                _LOGGER.debug(f"Added {len(area.labels)} labels from area")
+    return tags
+
+
+def full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
     try:
-        unsafe_full_event_listener(creds, constant_emitter, metrics_queue, event)
+        unsafe_full_event_listener(creds, hass, constant_emitter, metrics_queue, event)
     except:
         _LOGGER.exception(f"An error occured in event_state_changed callback")
 
-def unsafe_full_event_listener(creds: dict, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
+def unsafe_full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
         _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
@@ -403,8 +448,9 @@ def unsafe_full_event_listener(creds: dict, constant_emitter: ConstantMetricEmit
     friendly_name = new_state.attributes.get("friendly_name")
     if len(values) == 0:
         return
+    common_tags = additional_tags(hass, new_state)
     for (name, unit, value) in values:
-        tags = [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
+        tags = common_tags + [f"entity:{name}", "service:home-assistant", f"version:{HAVERSION}", f"env:{creds['env']}"]
         unit_name = None
         if unit is not None:
             unit_name, conversion = unit
