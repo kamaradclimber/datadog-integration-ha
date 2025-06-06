@@ -426,7 +426,7 @@ def additional_tags(hass, new_state) -> list[str]:
                     if ":" in l:
                         tags.append(l)
                     else:
-                        tags.append(f"device_label:{l}")
+                        tags.append(f"area_label:{l}")
                 _LOGGER.debug(f"Added {len(area.labels)} labels from area")
     return tags
 
