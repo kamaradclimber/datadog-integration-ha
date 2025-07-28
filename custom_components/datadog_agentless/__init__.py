@@ -27,6 +27,7 @@ from homeassistant.helpers.device_registry import EVENT_DEVICE_REGISTRY_UPDATED
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.components.automation import EVENT_AUTOMATION_TRIGGERED
 from homeassistant.const import __version__ as HAVERSION
@@ -394,25 +395,28 @@ def additional_tags(hass, new_state) -> list[str]:
     Adds new tags if relevant based on labels of the entity
     """
     tags = []
+    label_registry = lr.async_get(hass)
     entity_registry = er.async_get(hass)
     entity = entity_registry.async_get(new_state.entity_id)
     if entity is not None:
-        for l in entity.labels:
-            if ":" in l:
-                tags.append(l)
+        for label_id in entity.labels:
+            label_name = label_id_to_name(hass, label_id)
+            if ":" in label_name:
+                tags.append(label_name)
             else:
-                tags.append(f"entity_label:{l}")
+                tags.append(f"entity_label:{label_name}")
         _LOGGER.debug(f"Added {len(entity.labels)} labels from entity")
         area_id = None
         device_registry = dr.async_get(hass)
         if entity.device_id is not None:
             device = device_registry.async_get(entity.device_id)
             if device is not None:
-                for l in device.labels:
-                    if ":" in l:
-                        tags.append(l)
+                for label_id in device.labels:
+                    label_name = label_id_to_name(hass, label_id)
+                    if ":" in label_name:
+                        tags.append(label_name)
                     else:
-                        tags.append(f"device_label:{l}")
+                        tags.append(f"device_label:{label_name}")
                 area_id = device.area_id
                 _LOGGER.debug(f"Added {len(device.labels)} labels from device")
         if entity.area_id is not None:
@@ -422,11 +426,12 @@ def additional_tags(hass, new_state) -> list[str]:
             # area registry method access is not consistent, it should be async_get
             area = area_registry.async_get_area(area_id)
             if area is not None:
-                for l in area.labels:
-                    if ":" in l:
-                        tags.append(l)
+                for label_id in area.labels:
+                    label_name = label_id_to_name(hass, label_id)
+                    if ":" in label_name:
+                        tags.append(label_name)
                     else:
-                        tags.append(f"area_label:{l}")
+                        tags.append(f"area_label:{label_name}")
                 _LOGGER.debug(f"Added {len(area.labels)} labels from area")
     return tags
 
@@ -562,3 +567,9 @@ async def async_migrate_entry(hass, config_entry: ConfigEntry):
         new = {**config_entry.data}
         new["env"] = "prod"
         hass.config_entries.async_update_entry(config_entry, data=new, version=2)
+
+def label_id_to_name(label_registry, label_id) -> str:
+    label = label_registry.async_get_label(label_id)
+    if label is not None:
+        return label.name
+    return label_id
