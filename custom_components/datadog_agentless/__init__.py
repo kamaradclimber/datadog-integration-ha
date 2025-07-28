@@ -400,7 +400,7 @@ def additional_tags(hass, new_state) -> list[str]:
     entity = entity_registry.async_get(new_state.entity_id)
     if entity is not None:
         for label_id in entity.labels:
-            label_name = label_id_to_name(hass, label_id)
+            label_name = label_id_to_name(label_registry, label_id)
             if ":" in label_name:
                 tags.append(label_name)
             else:
@@ -412,7 +412,7 @@ def additional_tags(hass, new_state) -> list[str]:
             device = device_registry.async_get(entity.device_id)
             if device is not None:
                 for label_id in device.labels:
-                    label_name = label_id_to_name(hass, label_id)
+                    label_name = label_id_to_name(label_registry, label_id)
                     if ":" in label_name:
                         tags.append(label_name)
                     else:
@@ -427,7 +427,7 @@ def additional_tags(hass, new_state) -> list[str]:
             area = area_registry.async_get_area(area_id)
             if area is not None:
                 for label_id in area.labels:
-                    label_name = label_id_to_name(hass, label_id)
+                    label_name = label_id_to_name(label_registry, label_id)
                     if ":" in label_name:
                         tags.append(label_name)
                     else:
