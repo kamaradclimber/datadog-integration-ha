@@ -1,7 +1,9 @@
 {
   "domain": "datadog_agentless",
   "name": "Datadog agentless",
-  "codeowners": ["@kamaradclimber"],
+  "codeowners": [
+    "@kamaradclimber"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/kamaradclimber/datadog-integration-ha",
   "integration_type": "device",
@@ -12,5 +14,5 @@
     "zstandard",
     "python-dateutil"
   ],
-  "version": "0.1.0"
+  "version": "1.3.0"
 }
