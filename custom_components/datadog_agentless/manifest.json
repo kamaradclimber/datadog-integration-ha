@@ -8,8 +8,7 @@
   "iot_class": "assumed_state",
   "issue_tracker": "https://github.com/kamaradclimber/datadog-integration-ha/issues",
   "requirements": [
-    "aiosonic==0.15.1",
-    "datadog_api_client[async]==2.25.0",
+    "datadog_api_client[async]==2.50.0",
     "zstandard",
     "python-dateutil"
   ],
