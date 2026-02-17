@@ -6,8 +6,7 @@ import re
 import dateutil.parser
 import json
 import orjson
-from threading import Lock
-from queue import Queue
+import asyncio
 from collections.abc import Callable
 
 
@@ -67,7 +66,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api_client = AsyncApiClient(configuration)
     metrics_api = MetricsApi(api_client)
 
-    metrics_queue = Queue(maxsize=0)
+    # Store api_client for cleanup
+    hass.data[DOMAIN][entry.entry_id]["api_client"] = api_client
+
+    metrics_queue = asyncio.Queue(maxsize=0)
     @callback
     def metrics_dequeue_callback(now) -> None:
         entry.async_create_background_task(hass, send_metrics_loop(metrics_queue, metrics_api, constant_emitter), name="dequeue metrics to be sent to dd", eager_start=True)
@@ -81,7 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id]["unsubscribe_handler"] = unsubscribe
 
     events_api = EventsApi(api_client)
-    events_queue = Queue(maxsize=0)
+    events_queue = asyncio.Queue(maxsize=0)
     @callback
     def events_dequeue_callback(now) -> None:
         entry.async_create_background_task(hass, send_events_loop(events_queue, events_api), name="dequeue events to be sent to dd", eager_start=True)
@@ -101,7 +103,7 @@ async def send_events_loop(queue, events_api):
     _LOGGER.debug("Starting dequeuing from events queue")
     while not queue.empty():
         try:
-            event_request = queue.get()
+            event_request = await queue.get()
             _LOGGER.debug("Sending one event to dd api")
             response = await events_api.create_event(body=event_request)
             if response.status != "ok":
@@ -114,15 +116,15 @@ async def send_events_loop(queue, events_api):
 async def send_metrics_loop(queue, metrics_api, constant_emitter):
     _LOGGER.debug("Checking if time to flush old series")
     if constant_emitter.should_flush():
-        old_series = constant_emitter.flush_old_series()
+        old_series = await constant_emitter.flush_old_series()
         for serie in old_series:
-            queue.put(serie)
+            await queue.put(serie)
     _LOGGER.debug("Starting dequeuing from metrics queue")
     while not queue.empty():
         try:
             series = []
             while len(series) < 1024 and not queue.empty():
-                series.append(queue.get())
+                series.append(await queue.get())
 
             if len(series) > 0:
                 payload = MetricPayload(series=series)
@@ -153,6 +155,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if "unsubscribe_handler" in hass.data[DOMAIN][entry.entry_id]:
         hass.data[DOMAIN][entry.entry_id]["unsubscribe_handler"]()
+    if "unsubscribe_all_event_handler" in hass.data[DOMAIN][entry.entry_id]:
+        hass.data[DOMAIN][entry.entry_id]["unsubscribe_all_event_handler"]()
+    if "api_client" in hass.data[DOMAIN][entry.entry_id]:
+        await hass.data[DOMAIN][entry.entry_id]["api_client"].close()
     return unload_ok
 
 PREFIX = "hass"
@@ -163,14 +169,14 @@ class ConstantMetricEmitter:
         self.last_sent = dict()
         self.last_flush = int(datetime.datetime.now().timestamp())
         self.flush_interval = 250
-        self.mutex = Lock()
+        self.mutex = asyncio.Lock()
 
-    def record_last_sent(self, metric: MetricSeries) -> None:
-        with self.mutex:
+    async def record_last_sent(self, metric: MetricSeries) -> None:
+        async with self.mutex:
             self.last_sent[(metric.metric, tuple(metric.tags))] = metric
-    
-    def flush_old_series(self) -> list[MetricSeries]:
-        with self.mutex:
+
+    async def flush_old_series(self) -> list[MetricSeries]:
+        async with self.mutex:
             now = int(datetime.datetime.now().timestamp())
             old_series = []
             for metric_id in self.last_sent:
@@ -226,7 +232,7 @@ def ignore_by_entity_id(entity_id: str) -> bool:
         return True
     if re.match(".+unit", entity_id):
         return True
-    if re.match("", entity_id):
+    if entity_id == "":
         return True
 
     return False
@@ -436,13 +442,13 @@ def additional_tags(hass, new_state) -> list[str]:
     return tags
 
 
-def full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
+async def full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
     try:
-        unsafe_full_event_listener(creds, hass, constant_emitter, metrics_queue, event)
-    except:
-        _LOGGER.exception(f"An error occured in event_state_changed callback")
+        await unsafe_full_event_listener(creds, hass, constant_emitter, metrics_queue, event)
+    except Exception:
+        _LOGGER.exception("An error occured in event_state_changed callback")
 
-def unsafe_full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
+async def unsafe_full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
         _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
@@ -471,16 +477,16 @@ def unsafe_full_event_listener(creds: dict, hass, constant_emitter: ConstantMetr
             value = int(value)
         metric_serie = MetricSeries(metric=metric_name, type=MetricIntakeType.GAUGE, tags=tags, unit=unit_name,
                            points=[MetricPoint(timestamp=int(timestamp.timestamp()), value=value)])
-        metrics_queue.put(metric_serie)
-        constant_emitter.record_last_sent(metric_serie)
+        await metrics_queue.put(metric_serie)
+        await constant_emitter.record_last_sent(metric_serie)
 
-def full_all_event_listener(creds: dict, events_queue, event: Event):
+async def full_all_event_listener(creds: dict, events_queue, event: Event):
     try:
-        unsafe_full_all_event_listener(creds, events_queue, event)
-    except:
-        _LOGGER.exception(f"An error occured in the event listener")
+        await unsafe_full_all_event_listener(creds, events_queue, event)
+    except Exception:
+        _LOGGER.exception("An error occured in the event listener")
 
-def unsafe_full_all_event_listener(creds: dict, events_queue, event: Event):
+async def unsafe_full_all_event_listener(creds: dict, events_queue, event: Event):
     if event.event_type == "state_changed":
         if len(extract_states(event)) > 0:
             # those events will be converted to metric, no need to double send them
@@ -499,7 +505,7 @@ def unsafe_full_all_event_listener(creds: dict, events_queue, event: Event):
             text=text,
             tags=tags + event_specific_tags,
     )
-    events_queue.put(event_request)
+    await events_queue.put(event_request)
 
 
 

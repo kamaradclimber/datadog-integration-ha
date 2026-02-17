@@ -13,7 +13,6 @@ from homeassistant import config_entries
 from .const import (
     DOMAIN,
 )
-from homeassistant import config_entries
 
 _LOGGER = logging.getLogger(__name__)
 
