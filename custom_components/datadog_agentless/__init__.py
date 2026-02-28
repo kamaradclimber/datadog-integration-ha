@@ -351,6 +351,12 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         except ValueError:
             _LOGGER.warn(f"Unable to parse {value} as a timestamp")
 
+    if re.match(".+_attribute_device_class$", entity_id):
+        return None
+
+    if re.match(".+_attribute_state_class$", entity_id):
+        return None
+
     if re.match("^input_datetime.+", new_state.entity_id) and new_state.attributes["timestamp"]:
         return new_state.attributes["timestamp"]
 
