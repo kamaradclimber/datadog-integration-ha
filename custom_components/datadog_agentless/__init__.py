@@ -228,7 +228,7 @@ def ignore_by_entity_id(entity_id: str) -> bool:
     # powercalc attributes
     if re.match(".+_device_power_attribute_.+", entity_id):
         return True
-    if re.match(".+_attribute_(source|sourcedomain|sourceentity|energysensorentityid|integration|calculationmode|priceentity|energyentity|status|accesstoken|attribution|devicename|deviceid|batterytypeandquantity|batterytype|access_token|energy_entity|nickname|period_key)", entity_id):
+    if re.match(".+_attribute_(source|sourcedomain|sourceentity|energysensorentityid|integration|calculationmode|priceentity|energyentity|status|accesstoken|attribution|devicename|deviceid|batterytypeandquantity|batterytype|access_token|energy_entity|nickname|period_key|_weather|country_code)", entity_id):
         return True
     if re.match(".+unit", entity_id):
         return True
