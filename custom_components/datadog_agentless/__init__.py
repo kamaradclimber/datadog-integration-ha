@@ -7,6 +7,8 @@ import dateutil.parser
 import json
 import orjson
 import asyncio
+import ssl
+import threading
 from collections.abc import Callable
 
 
@@ -65,6 +67,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     api_client = AsyncApiClient(configuration)
     metrics_api = MetricsApi(api_client)
+
+    # Pre-load SSL default certificates in a background thread to avoid
+    # blocking the event loop on the first API call (Python 3.14+).
+    # See https://github.com/kamaradclimber/datadog-integration-ha/issues/46
+    def _warm_ssl_context():
+        ssl.create_default_context()
+    threading.Thread(target=_warm_ssl_context, daemon=True).start()
 
     # Store api_client for cleanup
     hass.data[DOMAIN][entry.entry_id]["api_client"] = api_client
