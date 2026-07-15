@@ -349,7 +349,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         if re.match("^light.wled_.+color", entity_id ):
             # ignore multivalue colors
             return
-        _LOGGER.warn(f"Hard to convert value {value} which is a tuple to a single value (entity: {entity_id})")
+        _LOGGER.warning(f"Hard to convert value {value} which is a tuple to a single value (entity: {entity_id})")
         return
     # let's ignore "known" string values
     if str(value).lower() in ["unavailable", "unknown", "info", "warn", "debug", "error", "on/off", "off/on", "restore", "stop", "opening", "", "scene_mode", "sunny", "cloud", "partlycloudy", "brightness"]:
@@ -358,10 +358,13 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
     # we can treat timestamps
     if "device_class" in new_state.attributes and new_state.attributes["device_class"] == SensorDeviceClass.TIMESTAMP and main_state:
         try:
-            timestamp = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S%z").timestamp()
+            try:
+                timestamp = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+            except ValueError:
+                timestamp = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S%z").timestamp()
             return timestamp
         except ValueError:
-            _LOGGER.warn(f"Unable to parse {value} as a timestamp")
+            _LOGGER.debug(f"Unable to parse {value} as a timestamp")
 
     if re.match(".+_attribute_device_class$", entity_id):
         return None
@@ -378,13 +381,13 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
             timestamp = dateutil.parser.parse(value).timestamp()
             return timestamp
         except ValueError:
-            _LOGGER.warn(f"Unable to parse {value} as a timestamp, even if it looks like one")
+            _LOGGER.debug(f"Unable to parse {value} as a timestamp, even if it looks like one")
     if re.match("20..-..-.." ,value):
         try:
             timestamp = dateutil.parser.parse(value).timestamp()
             return timestamp
         except ValueError:
-            _LOGGER.warn(f"Unable to parse {value} as a timestamp, even if it looks like one")
+            _LOGGER.debug(f"Unable to parse {value} as a timestamp, even if it looks like one")
 
     # some values can reasonnably be converted to numeric value
     if value.lower() in ["unprotected", "dead", "disabled", "inactive", "unlock", "off", "far", "down", "false", "none"]:
@@ -411,7 +414,7 @@ def _extract_state(new_state: State, entity_id: str, value: Any, main_state: boo
         if ignore_by_entity_id(entity_id):
             return None
 
-        _LOGGER.warn(f"Cannot treat this state changed event: {entity_id} to convert to metric. Error was: %s", e)
+        _LOGGER.debug(f"Cannot treat this state changed event: {entity_id} to convert to metric. Error was: %s", e)
         return None
 
 def additional_tags(hass, new_state) -> list[str]:
@@ -469,7 +472,7 @@ async def full_event_listener(creds: dict, hass, constant_emitter: ConstantMetri
 async def unsafe_full_event_listener(creds: dict, hass, constant_emitter: ConstantMetricEmitter, metrics_queue, event: Event[EventStateChangedData]):
     new_state = event.data["new_state"]
     if new_state is None:
-        _LOGGER.warn(f"This event has no new state, isn't it strange?. Event is {event}")
+        _LOGGER.warning(f"This event has no new state, isn't it strange?. Event is {event}")
         return
     domain = new_state.domain if new_state.domain else new_state.entity_id.split(".")[0]
     unitless_metric_name = f"{PREFIX}.{domain}".replace(" ", "_")
@@ -587,7 +590,7 @@ def build_state_tag(event) -> Tuple[Optional[str], list[str]]:
 
 async def async_migrate_entry(hass, config_entry: ConfigEntry):
     if config_entry.version == 1:
-        _LOGGER.warn("config entry is version 1, migrating to version 2")
+        _LOGGER.warning("config entry is version 1, migrating to version 2")
         new = {**config_entry.data}
         new["env"] = "prod"
         hass.config_entries.async_update_entry(config_entry, data=new, version=2)
